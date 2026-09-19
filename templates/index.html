@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TripMate AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+    <header class="hero">
+        <div class="skyfield" aria-hidden="true">
+            <svg class="route-line" viewBox="0 0 1200 500" preserveAspectRatio="none">
+                <path d="M -20,420 C 220,380 300,120 560,150 S 900,340 1220,80" />
+            </svg>
+            <span class="waypoint wp-1"></span>
+            <span class="waypoint wp-2"></span>
+            <span class="waypoint wp-3"></span>
+        </div>
+
+        <div class="hero-inner">
+            <p class="eyebrow">Multi-agent itinerary planning, built on LangGraph</p>
+            <h1 class="hero-title">Plan the trip.<br><em>Skip the tabs.</em></h1>
+            <p class="hero-sub">
+                Tell TripMate where you're headed. It searches flights, checks hotels
+                and drafts a day-by-day itinerary &mdash; agents doing the legwork
+                a human travel planner would.
+            </p>
+        </div>
+    </header>
+
+    <main class="app-container">
+
+        <section class="ticket" aria-label="Trip planner">
+
+            <div class="ticket-top">
+                <div class="ticket-head">
+                    <div>
+                        <span class="ticket-label">Destination brief</span>
+                        <h2>Where do you want to go?</h2>
+                    </div>
+                    <div class="status-pill">
+                        <span class="status-dot"></span>
+                        Agents online
+                    </div>
+                </div>
+
+                <div class="input-area">
+                    <textarea
+                        id="userInput"
+                        placeholder="Plan a complete 7 day Japan trip including flights, hotels and sightseeing under 2 lakhs..."
+                    ></textarea>
+                </div>
+
+                <div class="quick-prompts" role="group" aria-label="Example trips">
+                    <button type="button" onclick="setPrompt('Plan a complete 7 days Japan trip from Bangladesh including flights, hotels and sightseeing under 2 lakhs.')">
+                        Japan · 7 days
+                    </button>
+                    <button type="button" onclick="setPrompt('Plan a 5 days Dubai trip from Dhaka with flights, hotels and sightseeing.')">
+                        Dubai · 5 days
+                    </button>
+                    <button type="button" onclick="setPrompt('Plan a 7 days Thailand trip from Bangladesh with budget hotels and sightseeing.')">
+                        Thailand · 7 days
+                    </button>
+                    <button type="button" onclick="setPrompt('Give me all country flight info.')">
+                        Global flights
+                    </button>
+                </div>
+            </div>
+
+            <div class="perforation" aria-hidden="true"></div>
+
+            <div class="ticket-bottom">
+                <div class="ticket-meta">
+                    <span>FlyRank &rarr; Anywhere</span>
+                    <span>Powered by Groq &amp; Tavily</span>
+                </div>
+                <button id="sendBtn" class="generate-btn" onclick="sendMessage()">
+                    <span id="btnText">Generate plan</span>
+                    <span id="btnLoader" class="loader hidden"></span>
+                </button>
+            </div>
+        </section>
+
+        <section id="resultSection" class="result-section hidden">
+
+            <div class="result-header">
+                <div>
+                    <span class="ticket-label">Boarding pass &mdash; your itinerary</span>
+                    <h2>Your AI travel plan</h2>
+                    <p id="threadInfo">Thread ID: &mdash;</p>
+                </div>
+
+                <div class="result-actions">
+                    <button class="copy-btn" onclick="copyResult()">Copy</button>
+                    <button class="download-btn" onclick="downloadPDF()">Download PDF</button>
+                </div>
+            </div>
+
+            <div id="pdfContent" class="pdf-content">
+                <h1 class="pdf-title">AI Travel Plan</h1>
+                <div id="resultBox" class="result-box"></div>
+            </div>
+
+        </section>
+
+        <section id="errorBox" class="error-box hidden"></section>
+
+    </main>
+
+    <footer class="site-footer">
+        <span>TripMate AI</span>
+        <span class="footer-dot">&middot;</span>
+        <span>FastAPI &middot; LangGraph &middot; Groq &middot; PostgreSQL &middot; Tavily &middot; AviationStack</span>
+    </footer>
+
+    <!-- Markdown Renderer -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- PDF Download Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <!-- Your Custom JS -->
+    <script src="/static/script.js"></script>
+
+</body>
+</html>
