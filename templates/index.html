@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TripMate AI</title>
+    <title>Hamsafar</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -25,9 +25,10 @@
             <p class="eyebrow">Multi-agent itinerary planning, built on LangGraph</p>
             <h1 class="hero-title">Plan the trip.<br><em>Skip the tabs.</em></h1>
             <p class="hero-sub">
-                Tell TripMate where you're headed. It searches flights, checks hotels
-                and drafts a day-by-day itinerary &mdash; agents doing the legwork
-                a human travel planner would.
+                Tell Hamsafar where you're headed. A supervisor picks the right agents
+                to search flights, check hotels and weather, weigh your budget
+                and draft a day-by-day itinerary &mdash; the legwork
+                a human travel planner would do.
             </p>
         </div>
     </header>
@@ -56,13 +57,13 @@
                 </div>
 
                 <div class="quick-prompts" role="group" aria-label="Example trips">
-                    <button type="button" onclick="setPrompt('Plan a complete 7 days Japan trip from Bangladesh including flights, hotels and sightseeing under 2 lakhs.')">
+                    <button type="button" onclick="setPrompt('Plan a complete 7 days Japan trip from Pakistan including flights, hotels and sightseeing under 2 lakhs.')">
                         Japan · 7 days
                     </button>
-                    <button type="button" onclick="setPrompt('Plan a 5 days Dubai trip from Dhaka with flights, hotels and sightseeing.')">
+                    <button type="button" onclick="setPrompt('Plan a 5 days Dubai trip from Karachi with flights, hotels and sightseeing.')">
                         Dubai · 5 days
                     </button>
-                    <button type="button" onclick="setPrompt('Plan a 7 days Thailand trip from Bangladesh with budget hotels and sightseeing.')">
+                    <button type="button" onclick="setPrompt('Plan a 7 days Thailand trip from Pakistan with budget hotels and sightseeing.')">
                         Thailand · 7 days
                     </button>
                     <button type="button" onclick="setPrompt('Give me all country flight info.')">
@@ -92,6 +93,8 @@
                     <span class="ticket-label">Boarding pass &mdash; your itinerary</span>
                     <h2>Your AI travel plan</h2>
                     <p id="threadInfo">Thread ID: &mdash;</p>
+                    <!-- Shows which agents the supervisor picked (filled by script.js) -->
+                    <div id="agentsUsed" class="agents-used hidden" aria-label="Agents used"></div>
                 </div>
 
                 <div class="result-actions">
@@ -112,7 +115,7 @@
     </main>
 
     <footer class="site-footer">
-        <span>TripMate AI</span>
+        <span>Hamsafar</span>
         <span class="footer-dot">&middot;</span>
         <span>FastAPI &middot; LangGraph &middot; Groq &middot; PostgreSQL &middot; Tavily &middot; AviationStack</span>
     </footer>

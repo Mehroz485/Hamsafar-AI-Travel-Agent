@@ -2,6 +2,15 @@ let currentThreadId = localStorage.getItem("travel_thread_id") || null;
 let latestAnswerMarkdown = "";
 let isSending = false;
 
+// Friendly names for the agent ids sent by the backend
+const AGENT_LABELS = {
+    flight_agent: "Flights",
+    hotel_agent: "Hotels",
+    weather_agent: "Weather",
+    budget_agent: "Budget",
+    itinerary_agent: "Itinerary"
+};
+
 function setPrompt(text) {
     const input = document.getElementById("userInput");
     input.value = text;
@@ -50,7 +59,33 @@ function hideError() {
     errorBox.textContent = "";
 }
 
-function showResult(answer, threadId) {
+// Show small chips for the agents the supervisor picked (e.g. Flights, Hotels).
+// If the backend sends no list, the chips stay hidden.
+function renderAgents(selectedAgents) {
+    const agentsUsed = document.getElementById("agentsUsed");
+
+    if (!agentsUsed) {
+        return;
+    }
+
+    agentsUsed.innerHTML = "";
+
+    if (!Array.isArray(selectedAgents) || selectedAgents.length === 0) {
+        agentsUsed.classList.add("hidden");
+        return;
+    }
+
+    selectedAgents.forEach((name) => {
+        const chip = document.createElement("span");
+        chip.className = "agent-chip";
+        chip.textContent = AGENT_LABELS[name] || name;
+        agentsUsed.appendChild(chip);
+    });
+
+    agentsUsed.classList.remove("hidden");
+}
+
+function showResult(answer, threadId, selectedAgents) {
     latestAnswerMarkdown = answer;
 
     const resultSection = document.getElementById("resultSection");
@@ -64,6 +99,7 @@ function showResult(answer, threadId) {
     }
 
     threadInfo.textContent = `Thread ID: ${threadId}`;
+    renderAgents(selectedAgents);
 
     resultSection.classList.remove("hidden");
 
@@ -117,7 +153,14 @@ async function sendMessage() {
         currentThreadId = data.thread_id;
         localStorage.setItem("travel_thread_id", currentThreadId);
 
-        showResult(data.answer, data.thread_id);
+        // The guardrail blocked this request (not a travel question):
+        // show its message instead of a travel plan.
+        if (data.guardrail_allowed === false) {
+            showError(data.answer || data.guardrail_reason || "Hamsafar can only help with travel-planning requests.");
+            return;
+        }
+
+        showResult(data.answer, data.thread_id, data.selected_agents);
 
     } catch (error) {
         if (error instanceof TypeError) {
