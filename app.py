@@ -19,7 +19,12 @@ from pydantic import BaseModel, Field
 
 # Our travel agent functions (the LangGraph brain) live in backend.py
 # run_travel_agent = starts a new plan, resume_travel_agent = continues after the human review
-from backend import run_travel_agent, resume_travel_agent
+
+import json
+from fastapi.responses import StreamingResponse
+from backend import (run_travel_agent, resume_travel_agent,
+                     stream_travel_agent, stream_resume_travel_agent)
+
 
 # The folder where this app.py file lives. All other folders are found from here
 BASE_DIR = Path(__file__).resolve().parent
@@ -222,3 +227,28 @@ if __name__ == "__main__":
         port=8000,
         reload=True
     )
+
+
+
+
+
+def _sse(gen):
+    def events():
+        try:
+            for ev in gen:
+                yield f"data: {json.dumps(ev, default=str)}\n\n"
+        except Exception as e:
+            traceback.print_exc()
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    return StreamingResponse(
+        events(), media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+@app.post("/api/travel/stream")
+async def travel_stream(req: TravelRequest):
+    return _sse(stream_travel_agent(req.message.strip(), req.thread_id))
+
+@app.post("/api/travel/approve/stream")
+async def approve_stream(req: ApprovalRequest):
+    return _sse(stream_resume_travel_agent(req.thread_id, req.approved, req.feedback))

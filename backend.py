@@ -1053,3 +1053,45 @@ def resume_travel_agent(
 
     # Turn the raw result into a clean dictionary for the frontend.
     return _serialize_result(result, thread_id)
+
+
+
+
+
+
+
+def _stream_graph(graph_input, thread_id: str):
+    config = {"configurable": {"thread_id": thread_id}}
+
+    for mode, chunk in travel_graph.stream(graph_input, config, stream_mode=["tasks"]):
+        name = chunk.get("name")
+        if "triggers" in chunk:                      # a node just started
+            yield {"type": "agent_start", "agent": name}
+        else:                                        # a node just finished
+            if name == "human_approval" and chunk.get("interrupts"):
+                yield {"type": "waiting_approval", "agent": name}
+            else:
+                yield {"type": "agent_done", "agent": name, "error": chunk.get("error")}
+
+    snap = travel_graph.get_state(config)
+    result = dict(snap.values)
+    pending = [i for t in snap.tasks for i in t.interrupts]
+    if pending:
+        result["__interrupt__"] = pending
+
+    yield {"type": "final", "data": {"success": True, **_serialize_result(result, thread_id)}}
+
+
+def stream_travel_agent(user_input: str, thread_id: str | None = None):
+    thread_id = thread_id or f"user_{uuid.uuid4().hex}"
+    graph_input = {
+        "user_query": user_input,
+        "messages": [HumanMessage(content=user_input)],
+        "llm_calls": 0,
+    }
+    yield from _stream_graph(graph_input, thread_id)
+
+
+def stream_resume_travel_agent(thread_id: str, approved: bool, feedback: str = ""):
+    resume = Command(resume={"approved": approved, "feedback": feedback})
+    yield from _stream_graph(resume, thread_id)

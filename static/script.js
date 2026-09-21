@@ -194,9 +194,30 @@ function showResult(answer, threadId, selectedAgents) {
 }
 
 async function sendMessage() {
-    if (isSending) {
-        return;
+    const inputEl = document.getElementById("userInput");   // CHANGE to your input's id
+    const message = inputEl.value.trim();
+    if (!message || isSending) return;
+
+    isSending = true;
+    try {
+        const data = await streamTravel("/api/travel/stream", {
+            message: message,
+            thread_id: threadId,
+        });
+
+        if (!data || !data.success) {
+            throw new Error((data && data.error) || "Something went wrong.");
+        }
+
+        threadId = data.thread_id;
+        showResult(data);
+    } catch (err) {
+        console.error(err);
+        alert(err.message);   // swap for your own error display if you have one
+    } finally {
+        isSending = false;
     }
+}
 
     hideError();
     // A new request starts, so hide any old review box.
@@ -360,3 +381,69 @@ document.addEventListener("keydown", function (event) {
         hideError();
     }
 });
+
+
+const AGENT_LABELS = {
+  supervisor: "🧭 Supervisor: checking request & planning",
+  flight_agent: "✈️ Flight agent: searching flights",
+  hotel_agent: "🏨 Hotel agent: finding hotels",
+  weather_agent: "🌦️ Weather agent: calling weather MCP",
+  budget_agent: "💰 Budget agent: analysing budget",
+  itinerary_agent: "🗓️ Itinerary agent: building draft",
+  human_approval: "🙋 Waiting for your approval",
+  final_agent: "📝 Final agent: writing final plan",
+  guardrail_blocked: "🛡️ Guardrail: request blocked",
+};
+
+function progressBox() {
+  let box = document.getElementById("agent-progress");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "agent-progress";
+    const anchor = document.getElementById("result") || document.body;
+    anchor.insertAdjacentElement("beforebegin", box);
+  }
+  box.innerHTML = "";
+  return box;
+}
+
+function updateStep(box, ev) {
+  let row = box.querySelector(`[data-agent="${ev.agent}"]`);
+  if (!row) {
+    row = document.createElement("div");
+    row.dataset.agent = ev.agent;
+    box.appendChild(row);
+  }
+  const label = AGENT_LABELS[ev.agent] || ev.agent;
+  if (ev.type === "agent_start") { row.className = "step running"; row.innerHTML = `<span class="spin"></span>${label}`; }
+  else if (ev.type === "waiting_approval") { row.className = "step waiting"; row.innerHTML = `⏸ ${label}`; }
+  else if (ev.type === "agent_done") { row.className = ev.error ? "step failed" : "step done"; row.innerHTML = `${ev.error ? "❌" : "✅"} ${label}`; }
+}
+
+async function streamTravel(url, body) {
+  const box = progressBox();
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", finalData = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    const parts = buf.split("\n\n");
+    buf = parts.pop();
+    for (const p of parts) {
+      if (!p.startsWith("data: ")) continue;
+      const ev = JSON.parse(p.slice(6));
+      if (ev.type === "final") finalData = ev.data;
+      else if (ev.type === "error") throw new Error(ev.error);
+      else updateStep(box, ev);
+    }
+  }
+  return finalData;
+}

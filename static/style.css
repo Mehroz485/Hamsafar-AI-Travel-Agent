@@ -580,3 +580,13 @@ button:focus-visible {
 @media (max-width: 640px) {
   .approval-actions { flex-direction: column; }
 }
+
+
+#agent-progress { margin: 16px 0; display: grid; gap: 6px; }
+.step { padding: 8px 12px; border-radius: 8px; font-size: 14px; background: #f3f4f6; }
+.step.running { background: #eff6ff; color: #1d4ed8; }
+.step.done { background: #f0fdf4; color: #166534; }
+.step.waiting { background: #fffbeb; color: #92400e; }
+.step.failed { background: #fef2f2; color: #991b1b; }
+.spin { display: inline-block; width: 12px; height: 12px; margin-right: 8px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: sp .7s linear infinite; vertical-align: -1px; }
+@keyframes sp { to { transform: rotate(360deg); } }
