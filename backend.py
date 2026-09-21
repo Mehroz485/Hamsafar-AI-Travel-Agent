@@ -37,6 +37,9 @@ from psycopg.rows import dict_row
 from langgraph.graph import StateGraph, START, END
 # PostgresSaver saves the progress of every conversation in PostgreSQL (the graph's memory).
 from langgraph.checkpoint.postgres import PostgresSaver
+# interrupt = PAUSES the graph and waits for a human.
+# Command = RESUMES the paused graph with the human's answer.
+from langgraph.types import Command, interrupt
 # Message types used to talk to the AI:
 # HumanMessage = what the user says, AIMessage = what the AI says,
 # SystemMessage = instructions for the AI, AnyMessage = any of these.
@@ -141,6 +144,14 @@ class TravelState(TypedDict, total=False):
     itinerary: str
     # The final answer shown to the user.
     final_response: str
+
+    # Human-in-the-loop (HITL) state
+    # The message asking the human to review the draft itinerary.
+    approval_request: str
+    # True = the human approved the draft, False = the human wants changes.
+    approved: bool
+    # The human's revision notes (empty if approved without notes).
+    human_feedback: str
 
     # Counter: how many times we called the AI model.
     llm_calls: int
@@ -615,6 +626,7 @@ Budget Results:
 Make the itinerary practical, budget-aware, and easy to follow.
 Use only the information provided above; if a section is empty, it was not
 requested, so skip it rather than inventing details.
+Create a clear draft that is ready for human review.
 """
 
     # Send the prompt to the AI and get the itinerary.
@@ -625,12 +637,58 @@ requested, so skip it rather than inventing details.
         ]
     )
 
+    # The message we show to the human, asking them to review this draft.
+    approval_request = (
+        "Please review the generated draft itinerary. Approve it to create the "
+        "final polished plan, or provide feedback for revision."
+    )
+
     # Save the itinerary in the state, add a chat message,
     # and increase the AI-call counter by 1.
+    # Also save the approval message. The next node (human_approval) will pause and show it.
     return {
         "itinerary": response.content,
-        "messages": [AIMessage(content="Itinerary created.")],
+        "approval_request": approval_request,
+        "messages": [AIMessage(content="Draft itinerary created for human review.")],
         "llm_calls": state.get("llm_calls", 0) + 1,
+    }
+
+
+# =========================
+# Human-in-the-Loop approval
+# =========================
+# HUMAN APPROVAL node: PAUSES the graph so a real person can review the draft itinerary.
+# The person can approve it, or send feedback asking for changes.
+# After the person answers, the graph continues to the final agent.
+def human_approval_agent(state: TravelState):
+    # Do not wrap interrupt() in try/except. LangGraph uses it to pause execution.
+    # interrupt() stops the graph here and sends this data out to the frontend.
+    # The graph stays paused (saved in PostgreSQL) until resume_travel_agent() is called.
+    review = interrupt(
+        {
+            "question": "Do you approve this itinerary?",
+            "draft_itinerary": state.get("itinerary", ""),
+            "approval_request": state.get("approval_request", ""),
+            "selected_agents": state.get("selected_agents", []),
+            "supervisor_reasoning": state.get("supervisor_reasoning", ""),
+            "expected_response": {
+                "approved": True,
+                "feedback": "Optional revision feedback",
+            },
+        }
+    )
+
+    # After the human answers, 'review' holds their answer.
+    # Read 'approved' (True/False). If it is missing, treat it as False.
+    approved = bool(review.get("approved", False))
+    # Read the human's feedback text and remove extra spaces.
+    human_feedback = str(review.get("feedback", "")).strip()
+
+    # Save the human's decision in the state so the final agent can use it.
+    return {
+        "approved": approved,
+        "human_feedback": human_feedback,
+        "messages": [AIMessage(content="Human approval step completed.")],
     }
 
 
@@ -640,10 +698,26 @@ requested, so skip it rather than inventing details.
 # FINAL AGENT: takes everything (flights, hotels, weather, budget, itinerary)
 # and asks the AI to write one neat final answer for the user.
 def final_agent(state: TravelState):
+    # Tell the AI what the human decided:
+    # approved -> keep the draft and just polish it.
+    # not approved -> apply the human's feedback carefully.
+    if state.get("approved", False):
+        review_instruction = (
+            "The user approved the draft. Preserve its decisions while polishing it."
+        )
+    else:
+        review_instruction = f"""
+The user requested a revision. Apply this feedback carefully:
+{state.get('human_feedback', '') or 'Improve the draft before finalizing it.'}
+"""
+
     # Instructions for the AI on how to write the final answer
     # (including the list of sections to use).
     final_prompt = f"""
 Generate the final travel response for the user.
+
+Human Review:
+{review_instruction}
 
 User Request:
 {state['user_query']}
@@ -681,6 +755,7 @@ Important:
 - Mention that live flight API may not provide ticket prices if pricing is unavailable.
 - Keep the response useful for real travel planning.
 - Omit any section whose data was not gathered and is not relevant to the request.
+- Incorporate the human feedback when revision was requested.
 """
 
     # Send the prompt to the AI and get the final answer.
@@ -780,6 +855,8 @@ graph.add_node("hotel_agent", hotel_agent)
 graph.add_node("weather_agent", weather_agent)
 graph.add_node("budget_agent", budget_agent)
 graph.add_node("itinerary_agent", itinerary_agent)
+# The node where the graph pauses and waits for the human to approve or give feedback.
+graph.add_node("human_approval", human_approval_agent)
 graph.add_node("final_agent", final_agent)
 
 # Add edges (the arrows). The flow always starts at the supervisor.
@@ -796,7 +873,10 @@ graph.add_conditional_edges("budget_agent", route_after_agent("budget_agent"), R
 
 # Fixed arrows: itinerary -> final answer -> END.
 # A blocked request goes straight to END.
-graph.add_edge("itinerary_agent", "final_agent")
+# CHANGED: the itinerary now goes to human_approval first (the graph pauses there),
+# and only after the human answers does it continue to the final agent.
+graph.add_edge("itinerary_agent", "human_approval")
+graph.add_edge("human_approval", "final_agent")
 graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
@@ -825,6 +905,79 @@ checkpointer.setup()
 # Finish building the graph and attach the database saver.
 # travel_graph is the ready-to-use app.
 travel_graph = graph.compile(checkpointer=checkpointer)
+
+
+# =========================
+# FastAPI-facing helpers
+# =========================
+# Helper: checks if the graph PAUSED for human approval.
+# When the graph pauses, the result has an '__interrupt__' key. We read the data inside it.
+def _interrupt_payload(result: dict[str, Any]) -> dict[str, Any] | None:
+    # Get the list of pauses (empty if the graph did not pause).
+    interrupts = result.get("__interrupt__", [])
+    # No pause -> nothing to return.
+    if not interrupts:
+        return None
+
+    # Take the first pause.
+    first_interrupt = interrupts[0]
+    # The data we sent inside interrupt() is stored in '.value'.
+    payload = getattr(first_interrupt, "value", first_interrupt)
+    # Always give back a dictionary.
+    return payload if isinstance(payload, dict) else {"value": payload}
+
+
+# Helper: turns the graph result into the clean dictionary we send to the frontend.
+# Used by both run_travel_agent (first run) and resume_travel_agent (after human review).
+def _serialize_result(
+    result: dict[str, Any],
+    thread_id: str,
+) -> dict[str, Any]:
+    # The chat history at the end of the run.
+    messages = result.get("messages", [])
+    # Text of the last message (empty if there are none).
+    last_message = messages[-1].content if messages else ""
+    # Prefer final_response. If it is empty, use the last message.
+    answer = result.get("final_response") or last_message
+    # Did the graph pause for human approval? (None = no)
+    interrupt_payload = _interrupt_payload(result)
+
+    # If the graph is paused, the answer to show is the DRAFT itinerary (waiting for approval).
+    if interrupt_payload:
+        answer = interrupt_payload.get("draft_itinerary") or result.get(
+            "itinerary", ""
+        )
+
+    # Send back the answer plus every intermediate result,
+    # so the frontend can show them.
+    return {
+        "thread_id": thread_id,
+        "answer": answer,
+        # True = the frontend must show the Approve / Request changes buttons.
+        "requires_approval": interrupt_payload is not None,
+        "approval_request": (
+            interrupt_payload.get("approval_request", "")
+            if interrupt_payload
+            else result.get("approval_request", "")
+        ),
+        "flight_results": result.get("flight_results", ""),
+        "hotel_results": result.get("hotel_results", ""),
+        "weather_results": result.get("weather_results", ""),
+        "budget_results": result.get("budget_results", ""),
+        "itinerary": (
+            interrupt_payload.get("draft_itinerary", "")
+            if interrupt_payload
+            else result.get("itinerary", "")
+        ),
+        "selected_agents": result.get("selected_agents", []),
+        "trip_constraints": result.get("trip_constraints", {}),
+        "supervisor_reasoning": result.get("supervisor_reasoning", ""),
+        "guardrail_allowed": result.get("guardrail_allowed", True),
+        "guardrail_reason": result.get("guardrail_reason", ""),
+        "approved": result.get("approved"),
+        "human_feedback": result.get("human_feedback", ""),
+        "llm_calls": result.get("llm_calls", 0),
+    }
 
 
 # =========================
@@ -859,32 +1012,44 @@ def run_travel_agent(user_input: str, thread_id: str | None = None):
             "budget_results": "",
             "itinerary": "",
             "final_response": "",
+            "approval_request": "",
+            "approved": False,
+            "human_feedback": "",
             "llm_calls": 0,
         },
         config=config,
     )
 
-    # The chat history at the end of the run.
-    messages = result.get("messages", [])
-    # Text of the last message (empty if there are none).
-    last_message = messages[-1].content if messages else ""
-    # Prefer final_response. If it is empty, use the last message.
-    final_answer = result.get("final_response") or last_message
+    # Turn the raw result into a clean dictionary for the frontend.
+    return _serialize_result(result, thread_id)
 
-    # Send back the answer plus every intermediate result,
-    # so the frontend can show them.
-    return {
-        "thread_id": thread_id,
-        "answer": final_answer,
-        "flight_results": result.get("flight_results", ""),
-        "hotel_results": result.get("hotel_results", ""),
-        "weather_results": result.get("weather_results", ""),
-        "budget_results": result.get("budget_results", ""),
-        "itinerary": result.get("itinerary", ""),
-        "selected_agents": result.get("selected_agents", []),
-        "trip_constraints": result.get("trip_constraints", {}),
-        "supervisor_reasoning": result.get("supervisor_reasoning", ""),
-        "guardrail_allowed": result.get("guardrail_allowed", True),
-        "guardrail_reason": result.get("guardrail_reason", ""),
-        "llm_calls": result.get("llm_calls", 0),
-    }
+
+# The function FastAPI calls AFTER the human reviewed the draft.
+# Input: the thread_id of the paused conversation, approved (True/False) and optional feedback.
+# Output: the same kind of dictionary as run_travel_agent (now with the final answer).
+def resume_travel_agent(
+    thread_id: str,
+    approved: bool,
+    feedback: str = "",
+):
+    """Resume the paused LangGraph thread after human review."""
+    # We must know WHICH paused conversation to continue.
+    if not thread_id:
+        raise ValueError("thread_id is required to resume a travel plan.")
+
+    # Tell LangGraph which conversation (thread) to load from the database.
+    config = {"configurable": {"thread_id": thread_id}}
+    # Command(resume=...) wakes up the paused graph and hands it the human's answer.
+    # The answer goes straight into interrupt() inside human_approval_agent.
+    result = travel_graph.invoke(
+        Command(
+            resume={
+                "approved": approved,
+                "feedback": feedback.strip(),
+            }
+        ),
+        config=config,
+    )
+
+    # Turn the raw result into a clean dictionary for the frontend.
+    return _serialize_result(result, thread_id)

@@ -30,9 +30,11 @@ function setLoading(isLoading) {
     const btnText = document.getElementById("btnText");
     const btnLoader = document.getElementById("btnLoader");
     const quickPrompts = document.querySelectorAll(".quick-prompts button");
+    const approvalButtons = document.querySelectorAll(".approval-actions button");
 
     sendBtn.disabled = isLoading;
     quickPrompts.forEach((button) => { button.disabled = isLoading; });
+    approvalButtons.forEach((button) => { button.disabled = isLoading; });
 
     if (isLoading) {
         btnText.classList.add("hidden");
@@ -85,6 +87,88 @@ function renderAgents(selectedAgents) {
     agentsUsed.classList.remove("hidden");
 }
 
+// Show the human review box (Approve / Request changes) under the draft plan.
+function showApproval(message) {
+    const approvalBox = document.getElementById("approvalBox");
+    const approvalText = document.getElementById("approvalText");
+    const feedbackInput = document.getElementById("feedbackInput");
+
+    if (!approvalBox) {
+        return;
+    }
+
+    approvalText.textContent = message || "Please review this draft plan.";
+    feedbackInput.value = "";
+    approvalBox.classList.remove("hidden");
+}
+
+// Hide the human review box (used when the plan is final or a new request starts).
+function hideApproval() {
+    const approvalBox = document.getElementById("approvalBox");
+
+    if (approvalBox) {
+        approvalBox.classList.add("hidden");
+    }
+}
+
+// Send the user's decision (approve or request changes) to the backend,
+// then show the final plan that comes back.
+async function submitApproval(approved) {
+    if (isSending) {
+        return;
+    }
+
+    hideError();
+
+    const feedback = document.getElementById("feedbackInput").value.trim();
+
+    // When asking for changes, the user must say what to change.
+    if (!approved && !feedback) {
+        showError("Please write what should change before requesting changes.");
+        return;
+    }
+
+    setLoading(true);
+
+    try {
+        const response = await fetch("/api/travel/approve", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                thread_id: currentThreadId,
+                approved: approved,
+                feedback: feedback
+            })
+        });
+
+        let data;
+        try {
+            data = await response.json();
+        } catch {
+            throw new Error("The server sent back something unreadable. Please try again.");
+        }
+
+        if (!response.ok || !data.success) {
+            throw new Error(data.error || "Something went wrong.");
+        }
+
+        // The plan is final now, so hide the review box and show the final answer.
+        hideApproval();
+        showResult(data.answer, data.thread_id, data.selected_agents);
+
+    } catch (error) {
+        if (error instanceof TypeError) {
+            showError("Couldn't reach the server. Check your connection and try again.");
+        } else {
+            showError(error.message);
+        }
+    } finally {
+        setLoading(false);
+    }
+}
+
 function showResult(answer, threadId, selectedAgents) {
     latestAnswerMarkdown = answer;
 
@@ -115,6 +199,8 @@ async function sendMessage() {
     }
 
     hideError();
+    // A new request starts, so hide any old review box.
+    hideApproval();
 
     const input = document.getElementById("userInput");
     const message = input.value.trim();
@@ -161,6 +247,11 @@ async function sendMessage() {
         }
 
         showResult(data.answer, data.thread_id, data.selected_agents);
+
+        // The graph paused: this is a DRAFT. Show Approve / Request changes buttons.
+        if (data.requires_approval) {
+            showApproval(data.approval_request);
+        }
 
     } catch (error) {
         if (error instanceof TypeError) {

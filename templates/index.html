@@ -108,6 +108,19 @@
                 <div id="resultBox" class="result-box"></div>
             </div>
 
+            <!-- Human review box: shown only while the draft waits for approval (filled by script.js) -->
+            <div id="approvalBox" class="approval-box hidden">
+                <p id="approvalText" class="approval-text"></p>
+                <textarea
+                    id="feedbackInput"
+                    placeholder="Optional when approving. Required when requesting changes: what should be different?"
+                ></textarea>
+                <div class="approval-actions">
+                    <button id="approveBtn" class="approve-btn" onclick="submitApproval(true)">Approve plan</button>
+                    <button id="reviseBtn" class="revise-btn" onclick="submitApproval(false)">Request changes</button>
+                </div>
+            </div>
+
         </section>
 
         <section id="errorBox" class="error-box hidden"></section>
