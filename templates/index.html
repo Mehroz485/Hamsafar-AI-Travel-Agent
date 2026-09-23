@@ -1,146 +1,124 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hamsafar</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/static/style.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hamsafar — Your Travel Companion</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300;9..144,500;9..144,600;9..144,700&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 
-    <header class="hero">
-        <div class="skyfield" aria-hidden="true">
-            <svg class="route-line" viewBox="0 0 1200 500" preserveAspectRatio="none">
-                <path d="M -20,420 C 220,380 300,120 560,150 S 900,340 1220,80" />
-            </svg>
-            <span class="waypoint wp-1"></span>
-            <span class="waypoint wp-2"></span>
-            <span class="waypoint wp-3"></span>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="kicker">Hamsafar &middot; Travel, planned by agents</p>
+      <h1>Where to,<br>this time?</h1>
+      <p class="hero-sub">Describe the trip. Flights, stays, weather and a full itinerary — drafted, then handed to you for the final word.</p>
+    </div>
+    <svg class="flight-path" viewBox="0 0 1000 120" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0,90 C 220,10 380,110 520,55 S 820,10 1000,70" />
+      <circle cx="80" cy="76" r="2.5" />
+      <circle cx="300" cy="52" r="2.5" />
+      <circle cx="520" cy="55" r="2.5" />
+      <circle cx="760" cy="34" r="2.5" />
+      <circle cx="940" cy="66" r="2.5" />
+    </svg>
+
+    <div class="jet" aria-hidden="true">
+      <svg viewBox="0 0 64 64">
+        <path d="M62 33c0 2-2 3.4-4.6 3.4H39.5L24.8 53H15l6.4-16.6H5.4C2.8 36.4 1 34.8 1 33s1.8-3.4 4.4-3.4h16L15 12.6h9.8l14.7 17H57.4C60 29.6 62 31 62 33z"/>
+      </svg>
+    </div>
+  </header>
+
+  <main class="shell">
+
+    <section class="ticket" aria-label="Trip request">
+      <div class="ticket-notch ticket-notch-left" aria-hidden="true"></div>
+      <div class="ticket-notch ticket-notch-right" aria-hidden="true"></div>
+
+      <div class="ticket-row ticket-head">
+        <span>Boarding request</span>
+        <span class="ticket-serial">HMSFR&nbsp;&middot;&nbsp;ORIGIN&nbsp;OPEN</span>
+      </div>
+
+      <label for="userInput" class="sr-only">Trip request</label>
+      <textarea id="userInput" rows="3" placeholder="Plan a 3-day trip to Tokyo from Islamabad with a budget of $1200"></textarea>
+
+      <div class="ask-row">
+        <div class="examples" id="examples">
+          <button type="button" class="chip" data-prompt="Flights from Islamabad to London next month">Flights only</button>
+          <button type="button" class="chip" data-prompt="Weather and forecast for Tokyo this week">Weather only</button>
+          <button type="button" class="chip" data-prompt="Plan a 5-day trip from Islamabad to Istanbul under $1500 with flights, hotels, weather and a full itinerary">Full trip</button>
+        </div>
+        <div class="ask-actions">
+          <button id="newTripBtn" type="button" class="ghost">New trip</button>
+          <button id="sendBtn" type="button" class="primary">Generate plan</button>
+        </div>
+      </div>
+
+      <div class="ticket-perf" aria-hidden="true"></div>
+      <div class="ticket-row ticket-foot">
+        <span>Class</span><span>Agent&nbsp;&middot;&nbsp;Economy of words</span>
+      </div>
+    </section>
+
+    <section id="progress-wrap" class="block" hidden>
+      <h2>Agent activity</h2>
+      <ol id="agent-progress" class="steps"></ol>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="result" class="block" hidden>
+      <article class="boarding-pass">
+        <div class="bp-notch bp-notch-left" aria-hidden="true"></div>
+        <div class="bp-notch bp-notch-right" aria-hidden="true"></div>
+
+        <div class="bp-strip">
+          <span>Hamsafar</span>
+          <span id="result-title"></span>
         </div>
 
-        <div class="hero-inner">
-            <p class="eyebrow">Multi-agent itinerary planning, built on LangGraph</p>
-            <h1 class="hero-title">Plan the trip.<br><em>Skip the tabs.</em></h1>
-            <p class="hero-sub">
-                Tell Hamsafar where you're headed. A supervisor picks the right agents
-                to search flights, check hotels and weather, weigh your budget
-                and draft a day-by-day itinerary &mdash; the legwork
-                a human travel planner would do.
-            </p>
+        <div id="result-body" class="prose"></div>
+
+        <div id="approval" class="approval" hidden>
+          <p id="approval-note"></p>
+          <label for="feedback" class="sr-only">Requested changes</label>
+          <textarea id="feedback" rows="2" placeholder="Changes you want (required when requesting changes)"></textarea>
+          <p id="feedback-error" class="error" hidden>Describe what to change before requesting changes.</p>
+          <div class="approval-actions">
+            <button id="reviseBtn" type="button" class="ghost">Request changes</button>
+            <button id="approveBtn" type="button" class="primary">Approve plan</button>
+          </div>
         </div>
-    </header>
 
-    <main class="app-container">
+        <div class="ticket-perf" aria-hidden="true"></div>
+        <div id="agent-info"></div>
+        <div class="ticket-perf" aria-hidden="true"></div>
+        <div id="agent-info"></div>
+        
+        <!-- ADD THIS NEW BLOCK -->
+        <div class="ask-actions" style="margin-top: 24px; justify-content: flex-end;">
+          <button id="downloadBtn" type="button" class="ghost">Download Report</button>
+        </div>
+        <!-- END NEW BLOCK -->
 
-        <section class="ticket" aria-label="Trip planner">
+      </article>
+    </section>
+      </article>
+    </section>
 
-            <div class="ticket-top">
-                <div class="ticket-head">
-                    <div>
-                        <span class="ticket-label">Destination brief</span>
-                        <h2>Where do you want to go?</h2>
-                    </div>
-                    <div class="status-pill">
-                        <span class="status-dot"></span>
-                        Agents online
-                    </div>
-                </div>
+  </main>
 
-                <div class="input-area">
-                    <textarea
-                        id="userInput"
-                        placeholder="Plan a complete 7 day Japan trip including flights, hotels and sightseeing under 2 lakhs..."
-                    ></textarea>
-                </div>
+  <footer class="site-foot">
+    <p>Hamsafar &mdash; a multi-agent travel planner. Not a booking service; verify live details before you fly.</p>
+  </footer>
 
-                <div class="quick-prompts" role="group" aria-label="Example trips">
-                    <button type="button" onclick="setPrompt('Plan a complete 7 days Japan trip from Pakistan including flights, hotels and sightseeing under 2 lakhs.')">
-                        Japan · 7 days
-                    </button>
-                    <button type="button" onclick="setPrompt('Plan a 5 days Dubai trip from Karachi with flights, hotels and sightseeing.')">
-                        Dubai · 5 days
-                    </button>
-                    <button type="button" onclick="setPrompt('Plan a 7 days Thailand trip from Pakistan with budget hotels and sightseeing.')">
-                        Thailand · 7 days
-                    </button>
-                    <button type="button" onclick="setPrompt('Give me all country flight info.')">
-                        Global flights
-                    </button>
-                </div>
-            </div>
-
-            <div class="perforation" aria-hidden="true"></div>
-
-            <div class="ticket-bottom">
-                <div class="ticket-meta">
-                    <span>FlyRank &rarr; Anywhere</span>
-                    <span>Powered by Groq &amp; Tavily</span>
-                </div>
-                <button id="sendBtn" class="generate-btn" onclick="sendMessage()">
-                    <span id="btnText">Generate plan</span>
-                    <span id="btnLoader" class="loader hidden"></span>
-                </button>
-            </div>
-        </section>
-
-        <section id="resultSection" class="result-section hidden">
-
-            <div class="result-header">
-                <div>
-                    <span class="ticket-label">Boarding pass &mdash; your itinerary</span>
-                    <h2>Your AI travel plan</h2>
-                    <p id="threadInfo">Thread ID: &mdash;</p>
-                    <!-- Shows which agents the supervisor picked (filled by script.js) -->
-                    <div id="agentsUsed" class="agents-used hidden" aria-label="Agents used"></div>
-                </div>
-
-                <div class="result-actions">
-                    <button class="copy-btn" onclick="copyResult()">Copy</button>
-                    <button class="download-btn" onclick="downloadPDF()">Download PDF</button>
-                </div>
-            </div>
-
-            <div id="pdfContent" class="pdf-content">
-                <h1 class="pdf-title">AI Travel Plan</h1>
-                <div id="resultBox" class="result-box"></div>
-            </div>
-
-            <!-- Human review box: shown only while the draft waits for approval (filled by script.js) -->
-            <div id="approvalBox" class="approval-box hidden">
-                <p id="approvalText" class="approval-text"></p>
-                <textarea
-                    id="feedbackInput"
-                    placeholder="Optional when approving. Required when requesting changes: what should be different?"
-                ></textarea>
-                <div class="approval-actions">
-                    <button id="approveBtn" class="approve-btn" onclick="submitApproval(true)">Approve plan</button>
-                    <button id="reviseBtn" class="revise-btn" onclick="submitApproval(false)">Request changes</button>
-                </div>
-            </div>
-
-        </section>
-
-        <section id="errorBox" class="error-box hidden"></section>
-
-    </main>
-
-    <footer class="site-footer">
-        <span>Hamsafar</span>
-        <span class="footer-dot">&middot;</span>
-        <span>FastAPI &middot; LangGraph &middot; Groq &middot; PostgreSQL &middot; Tavily &middot; AviationStack</span>
-    </footer>
-
-    <!-- Markdown Renderer -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-
-    <!-- PDF Download Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-
-    <!-- Your Custom JS -->
-    <script src="/static/script.js"></script>
-
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+  <script src="/static/script.js"></script>
 </body>
 </html>

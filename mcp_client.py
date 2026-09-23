@@ -48,10 +48,9 @@ WEATHER_SERVER_PATH = PROJECT_DIR / "custom_mcp.py"
 # ==========================================
 
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",   # was llama-3.3-70b-versatile
     api_key=GROQ_API_KEY
 )
-
 
 # ==========================================
 # MCP client configuration
