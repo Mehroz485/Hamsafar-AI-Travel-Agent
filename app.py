@@ -44,7 +44,7 @@ async def home(request: Request):
     return templates.TemplateResponse(request=request, name="index.html", context={})
 
 
-# ---------- Streaming endpoints (used by the frontend) ----------
+
 
 def _sse(generator):
     """Wrap an event generator as a Server-Sent Events response."""
@@ -94,7 +94,7 @@ async def approve_stream(request_data: ApprovalRequest):
     )
 
 
-# ---------- Non-streaming endpoints (kept for curl / API use) ----------
+
 
 @app.post("/api/travel")
 async def travel_planner(request_data: TravelRequest):

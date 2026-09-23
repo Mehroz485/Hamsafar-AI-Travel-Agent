@@ -1,70 +1,70 @@
-# os lets us read settings (like API keys) from the computer.
+
 import os
-# certifi gives a trusted list of security certificates for safe internet (HTTPS) calls.
+
 import certifi
-# dotenv reads the secret values we wrote in the .env file.
+
 from dotenv import load_dotenv
 
-# Load everything from the .env file (GROQ_API_KEY, DATABASE_URL, ...).
-# We do this FIRST so the code below can use those values.
+
+
 load_dotenv()
 
-# Tell Python to use certifi's certificate list for secure connections.
-# This avoids 'SSL certificate' errors on some computers.
+
+
 os.environ["SSL_CERT_FILE"] = certifi.where()
 os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
 
-# asyncio runs 'async' functions (our weather MCP functions are async).
+
 import asyncio
-# json turns text like '{"a": 1}' into a Python dictionary.
+
 import json
-# operator.add is used so the messages list GROWS (new items are added) instead of being replaced.
+
 import operator
-# uuid makes a random unique id (we use it for thread_id).
+
 import uuid
-# ThreadPoolExecutor lets us run code in a separate thread (used in _run_async).
+
 from concurrent.futures import ThreadPoolExecutor
-# Type helpers. They only DESCRIBE what kind of data we use. They don't change how the code runs.
+
 from typing import Any, TypedDict, Annotated
 
-# psycopg is the library that talks to the PostgreSQL database.
+
 import psycopg
-# dict_row makes database rows come back as dictionaries.
+
 from psycopg.rows import dict_row
 
-# LangGraph pieces:
-# StateGraph = the flowchart builder, START = where the flow begins, END = where the flow finishes.
+
+
 from langgraph.graph import StateGraph, START, END
-# PostgresSaver saves the progress of every conversation in PostgreSQL (the graph's memory).
+
 from langgraph.checkpoint.postgres import PostgresSaver
-# interrupt = PAUSES the graph and waits for a human.
-# Command = RESUMES the paused graph with the human's answer.
+
+
 from langgraph.types import Command, interrupt
-# Message types used to talk to the AI:
-# HumanMessage = what the user says, AIMessage = what the AI says,
-# SystemMessage = instructions for the AI, AnyMessage = any of these.
+
+
+
 from langchain_core.messages import (
     AnyMessage,
     HumanMessage,
     AIMessage,
     SystemMessage,
 )
-# ChatGroq lets us use AI models hosted on Groq.
+
 from langchain_groq import ChatGroq
 
-# Our own weather MCP helpers:
-# weather_mcp_search = current weather, forecast_mcp_search = forecast,
-# extract_destination = finds the city name inside the user's text.
+
+
+
 from mcp_client import forecast_mcp_search, extract_destination, weather_mcp_search
-# Our tool that searches the web (used for hotels).
+
 from tools.tavily_tool import tavily_search
-# Our tool that searches flights.
+
 from tools.flight_tool import search_flights
 
 
-# =========================
-# Config
-# =========================
+
+
+
 def get_database_url():
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
@@ -82,17 +82,17 @@ if not GROQ_API_KEY:
     raise ValueError("GROQ_API_KEY is missing. Please add it to your .env file.")
 
 
-# =========================
-# LLM
-# =========================
+
+
+
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
     api_key=GROQ_API_KEY,
 )
 
-# =========================
-# State
-# =========================
+
+
+
 class TravelState(TypedDict, total=False):
     messages: Annotated[list[AnyMessage], operator.add]
     user_query: str
@@ -113,9 +113,9 @@ class TravelState(TypedDict, total=False):
     llm_calls: int
 
 
-# =========================
-# Shared helpers
-# =========================
+
+
+
 AGENT_ORDER = [
     "flight_agent",
     "hotel_agent",
@@ -163,9 +163,9 @@ def _run_async(coro):
         return pool.submit(asyncio.run, coro).result()
 
 
-# =========================
-# Supervisor Agent + Input Guardrail
-# =========================
+
+
+
 def supervisor_agent(state: TravelState):
     query = state["user_query"]
     llm_calls = state.get("llm_calls", 0)
@@ -292,9 +292,9 @@ User request:
         "llm_calls": llm_calls,
     }
 
-# =========================
-# Guardrail blocked node
-# =========================
+
+
+
 def guardrail_blocked_agent(state: TravelState):
     reason = (
         state.get("final_response")
@@ -306,16 +306,16 @@ def guardrail_blocked_agent(state: TravelState):
         "messages": [AIMessage(content=reason)],
     }
 
-# =========================
-# Flight Agent (tool)
-# =========================
+
+
+
 def flight_agent(state: TravelState):
     query = state["user_query"]
     try:
         flight_data = search_flights(query)
     except Exception as exc:
         print(f"FLIGHT AGENT ERROR: {type(exc).__name__}: {exc}", flush=True)
-        # CHANGED: Softened the fallback text so the LLM doesn't leak internal instructions.
+        
         flight_data = (
             "Live flight pricing is currently unavailable. Provide typical flight estimates "
             "based on historical data."
@@ -328,16 +328,16 @@ def flight_agent(state: TravelState):
     }
 
 
-# =========================
-# Hotel Agent (tool)
-# =========================
+
+
+
 def hotel_agent(state: TravelState):
     query = f"Best hotels for {state['user_query']}"
     try:
         hotel_results = tavily_search(query)
     except Exception as exc:
         print(f"HOTEL AGENT ERROR: {type(exc).__name__}: {exc}", flush=True)
-        # CHANGED: Softened fallback to prevent the LLM from leaking "non-live advice" notes.
+        
         hotel_results = (
             "Live hotel search is currently unavailable. Provide typical hotel and neighborhood "
             "guidance based on the destination."
@@ -350,9 +350,9 @@ def hotel_agent(state: TravelState):
     }
 
 
-# =========================
-# Weather Agent (custom weather MCP)
-# =========================
+
+
+
 def weather_agent(state: TravelState):
     city = (state.get("trip_constraints") or {}).get("destination", "").strip()
     try:
@@ -371,7 +371,7 @@ Forecast:
 """
     except Exception as exc:
         print(f"WEATHER AGENT MCP ERROR: {type(exc).__name__}: {exc}", flush=True)
-        # CHANGED: Softened fallback
+        
         weather_results = (
             f"Live weather information for {city or 'the destination'} is currently unavailable. "
             "Provide general seasonal weather guidance."
@@ -382,9 +382,9 @@ Forecast:
         "messages": [AIMessage(content="Weather information fetched.")],
     }
 
-# =========================
-# Budget Agent
-# =========================
+
+
+
 def budget_agent(state: TravelState):
     prompt = f"""
 Analyze whether this trip is realistic for the user's budget.
@@ -431,14 +431,14 @@ If exact live prices are unavailable, clearly label estimates as approximate.
     }
 
 
-# =========================
-# Itinerary Agent
-# =========================
+
+
+
 def itinerary_agent(state: TravelState):
-    # ADDED: Dynamically check what was actually requested to prevent forced itineraries
+    
     selected = state.get("selected_agents", [])
     
-    # If they only asked for flights, don't generate a 5-day itinerary!
+    
     is_full_trip = len(selected) > 2  
     
     if is_full_trip:
@@ -446,7 +446,7 @@ def itinerary_agent(state: TravelState):
     else:
         task_instruction = "Compile the requested travel information logically. Do NOT create a day-by-day itinerary unless explicitly requested."
 
-    # ADDED: Only feed the LLM data for agents that actually ran
+    
     data_blocks = []
     if "flight_agent" in selected and state.get('flight_results'): 
         data_blocks.append(f"Flight Results:\n{state['flight_results']}")
@@ -459,7 +459,7 @@ def itinerary_agent(state: TravelState):
     
     combined_data = "\n\n".join(data_blocks)
 
-# CHANGED: Added strict API-leak guardrails and tone instructions to the draft agent
+
     prompt = f"""
 {task_instruction}
 
@@ -500,9 +500,9 @@ Create a clear, beautifully formatted draft.
     }
 
 
-# =========================
-# Human-in-the-Loop approval
-# =========================
+
+
+
 def human_approval_agent(state: TravelState):
     review = interrupt(
         {
@@ -528,9 +528,9 @@ def human_approval_agent(state: TravelState):
     }
 
 
-# =========================
-# Final Response Agent
-# =========================
+
+
+
 def final_agent(state: TravelState):
     if state.get("approved", False):
         review_instruction = (
@@ -542,7 +542,7 @@ The user requested a revision. Apply this feedback carefully:
 {state.get('human_feedback', '') or 'Improve the draft before finalizing it.'}
 """
 
-    # ADDED: Dynamically construct allowed sections based ONLY on selected agents
+    
     selected = state.get("selected_agents", [])
     sections = ["- Summary of Request"]
     
@@ -555,7 +555,7 @@ The user requested a revision. Apply this feedback carefully:
     
     section_format = "\n".join(sections)
 
-    # ADDED: Fetch raw data context specifically for the final pass
+    
     data_blocks = []
     if "flight_agent" in selected: data_blocks.append(f"Flights:\n{state.get('flight_results', '')}")
     if "hotel_agent" in selected: data_blocks.append(f"Hotels:\n{state.get('hotel_results', '')}")
@@ -563,7 +563,7 @@ The user requested a revision. Apply this feedback carefully:
     if "budget_agent" in selected: data_blocks.append(f"Budget:\n{state.get('budget_results', '')}")
     combined_data = "\n\n".join(data_blocks)
 
-    # CHANGED: Re-wrote the final prompt to include extremely strict guardrails against API leaking and scope creep
+    
     final_prompt = f"""
 Generate the final travel response for the user.
 
@@ -607,9 +607,9 @@ CRITICAL RULES - READ CAREFULLY:
     }
 
 
-# =========================
-# Dynamic Supervisor Routing
-# =========================
+
+
+
 ROUTE_MAP = {
     "guardrail_blocked": "guardrail_blocked",
     "flight_agent": "flight_agent",
@@ -646,9 +646,9 @@ def route_after_agent(current_agent: str):
     return route
 
 
-# =========================
-# Build Graph
-# =========================
+
+
+
 graph = StateGraph(TravelState)
 
 graph.add_node("supervisor", supervisor_agent)
@@ -675,9 +675,9 @@ graph.add_edge("final_agent", END)
 graph.add_edge("guardrail_blocked", END)
 
 
-# =========================
-# PostgreSQL Checkpointer
-# =========================
+
+
+
 DATABASE_URL = get_database_url()
 
 _conn = psycopg.connect(
@@ -692,9 +692,9 @@ checkpointer.setup()
 travel_graph = graph.compile(checkpointer=checkpointer)
 
 
-# =========================
-# FastAPI-facing helpers
-# =========================
+
+
+
 def _interrupt_payload(result: dict[str, Any]) -> dict[str, Any] | None:
     interrupts = result.get("__interrupt__", [])
     if not interrupts:
@@ -748,9 +748,9 @@ def _serialize_result(
     }
 
 
-# =========================
-# Function for FastAPI
-# =========================
+
+
+
 def run_travel_agent(user_input: str, thread_id: str | None = None):
     if not thread_id:
         thread_id = f"user_{uuid.uuid4().hex}"
@@ -805,9 +805,9 @@ def resume_travel_agent(
     return _serialize_result(result, thread_id)
 
 
-# =========================
-# Streaming Endpoints
-# =========================
+
+
+
 def _stream_graph(graph_input, thread_id: str):
     config = {"configurable": {"thread_id": thread_id}}
     running = None  
