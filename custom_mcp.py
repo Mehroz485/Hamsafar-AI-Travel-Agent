@@ -2,6 +2,7 @@ from mcp.server.fastmcp import FastMCP
 import requests
 
 mcp = FastMCP("Weather MCP Server")
+OPENWEATHER_API_KEY = None
 
 
 
@@ -107,7 +108,6 @@ if __name__ == "__main__":
     mcp.run()
 
     
-
 
 
 

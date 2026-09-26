@@ -84,13 +84,10 @@ if not GROQ_API_KEY:
 
 
 
-
 llm = ChatGroq(
     model="openai/gpt-oss-120b",
     api_key=GROQ_API_KEY,
 )
-
-
 
 
 class TravelState(TypedDict, total=False):
@@ -111,10 +108,6 @@ class TravelState(TypedDict, total=False):
     approved: bool
     human_feedback: str
     llm_calls: int
-
-
-
-
 
 AGENT_ORDER = [
     "flight_agent",
@@ -531,6 +524,14 @@ def human_approval_agent(state: TravelState):
 
 
 
+def _trim(text, limit=500):
+    """Keep prompts under the TPM limit by capping each raw data block."""
+    text = str(text or "").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit] + "\n...[truncated for length]"
+
+
 def final_agent(state: TravelState):
     if state.get("approved", False):
         review_instruction = (
@@ -539,31 +540,30 @@ def final_agent(state: TravelState):
     else:
         review_instruction = f"""
 The user requested a revision. Apply this feedback carefully:
-{state.get('human_feedback', '') or 'Improve the draft before finalizing it.'}
+{_trim(state.get('human_feedback', ''), 300) or 'Improve the draft before finalizing it.'}
 """
 
-    
     selected = state.get("selected_agents", [])
     sections = ["- Summary of Request"]
-    
+
     if "flight_agent" in selected: sections.append("- Flight Information")
     if "hotel_agent" in selected: sections.append("- Hotel Suggestions")
     if "weather_agent" in selected: sections.append("- Weather Information")
     if "budget_agent" in selected: sections.append("- Estimated Budget")
     if len(selected) > 2: sections.append("- Day-by-Day Itinerary")
     sections.append("- Final Recommendations")
-    
+
     section_format = "\n".join(sections)
 
-    
+    # CHANGED: every raw data block is trimmed before it enters the prompt —
+    # this is what was blowing past the 8000 TPM limit (weather/flight JSON is verbose)
     data_blocks = []
-    if "flight_agent" in selected: data_blocks.append(f"Flights:\n{state.get('flight_results', '')}")
-    if "hotel_agent" in selected: data_blocks.append(f"Hotels:\n{state.get('hotel_results', '')}")
-    if "weather_agent" in selected: data_blocks.append(f"Weather:\n{state.get('weather_results', '')}")
-    if "budget_agent" in selected: data_blocks.append(f"Budget:\n{state.get('budget_results', '')}")
+    if "flight_agent" in selected: data_blocks.append(f"Flights:\n{_trim(state.get('flight_results', ''))}")
+    if "hotel_agent" in selected: data_blocks.append(f"Hotels:\n{_trim(state.get('hotel_results', ''))}")
+    if "weather_agent" in selected: data_blocks.append(f"Weather:\n{_trim(state.get('weather_results', ''))}")
+    if "budget_agent" in selected: data_blocks.append(f"Budget:\n{_trim(state.get('budget_results', ''))}")
     combined_data = "\n\n".join(data_blocks)
 
-    
     final_prompt = f"""
 Generate the final travel response for the user.
 
@@ -571,7 +571,7 @@ Human Review:
 {review_instruction}
 
 User Request:
-{state['user_query']}
+{_trim(state['user_query'], 300)}
 
 Supervisor Constraints:
 {state.get('trip_constraints', {})}
@@ -580,7 +580,7 @@ Raw Data:
 {combined_data}
 
 Itinerary Draft (Use this to structure your response):
-{state.get('itinerary', '')}
+{_trim(state.get('itinerary', ''), 1500)}
 
 Format the final answer beautifully using Markdown. 
 ONLY include the following sections if they apply to the user's request:
@@ -605,8 +605,6 @@ CRITICAL RULES - READ CAREFULLY:
         "messages": [response],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
-
-
 
 
 
